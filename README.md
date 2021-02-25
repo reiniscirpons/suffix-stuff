@@ -2,13 +2,13 @@
 
 The aim of this repo is to explore various datastructures and algorithms for
 computing statistics of subwords for a collection of words. We will primarily
-explore suffix-based structures, such as suffix arrays, trees automata and so
+explore suffix-based structures, such as suffix arrays, trees, automata and so
 on, since these seem to be well suited for the particular task.
 
 ## The problem
 We are mainly interested in solving the following problem:
 
-> Given a collection of words find then number of occurrences of each subword
+> Given a collection of words find the number of occurrences of each subword
 > and sort them in descending order according to the product of the length of
 > the subword and number of occurences (or similar metric)
 
