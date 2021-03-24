@@ -13,7 +13,7 @@ We are mainly interested in solving the following problems:
 > and sort them in descending order according to the product of the length of
 > the subword and number of occurences (or similar metric).
 
-We call Problem 1 the subword occurence metric problem.
+We call Problem 1 the _subword occurence metric_ problem.
 
 To define the second problem we introduce the following definition:
 Given a collection of words `w_1, ..., w_n` we define a _piece_ to be any
@@ -27,7 +27,7 @@ word `v` that has at least two occurences as a subword of the `w_i`'s
 > piece, and furthermore, `v_i1` is the largest such prefix of `w_i`, `v_i2` is
 > the largest such prefix of the remainder of `w_i` after removing `v_i1` etc.
 
-We call Problem 2 the greedy piece factorization problem.
+We call Problem 2 the _greedy piece factorization_ problem.
 
 ## Workflow
 The current workflow is structured as follows:

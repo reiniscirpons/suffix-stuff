@@ -105,3 +105,45 @@ def test_add_word(word, structure, structure_root):
     A = suffix_automaton.SuffixAutomaton([])
     A.add_word(word)
     assert verify_automaton_structure(A, structure, structure_root)
+
+@pytest.mark.parametrize("words, structure, structure_root",
+        [(["aa"],
+          {0: {"a": 1},
+           1: {"a": 2},
+           2: {}},
+          0),
+         (["aba"],
+          {0: {"a": 1, "b": 2},
+           1: {"b": 2},
+           2: {"a": 3},
+           3: {}},
+          0),
+         (["abb"],
+          {0: {"a": 1, "b": 4},
+           1: {"b": 2},
+           2: {"b": 3},
+           3: {},
+           4: {"b": 3}},
+          0),
+         (["aa", "aba"],
+          {0: {"a": 1, "b": 3},
+           1: {"a": 2, "b": 3},
+           2: {},
+           3: {"a": 2}},
+          0),
+         (["aba", "aa"],
+          {0: {"a": 1, "b": 3},
+           1: {"a": 2, "b": 3},
+           2: {},
+           3: {"a": 2}},
+          0)
+        ])
+def test_add_multiple_words(words, structure, structure_root):
+    """ Check that SuffixAutomaton.__init__() operates correctly. """
+    A = suffix_automaton.SuffixAutomaton(words)
+    for i in range(len(A.states)):
+        print(i, ": {", end = "")
+        for a in A.states[i].transition:
+            print(a, ":", A.states[i].transition[a].state_id, end =", ")
+        print("}")
+    assert verify_automaton_structure(A, structure, structure_root)
