@@ -60,10 +60,34 @@ class SuffixAutomaton:
         # This is constant
         self.root: StateId = 0
         self.states.append(State(state_id=self.root, length=0))
-        for word in words:
-            self.add_word(word)
 
-    def add_word(self, word: Word) -> State:
+        if len(words) == 0:
+            pass
+        elif len(words) == 1:
+            # Simple case, no need to do anything complicated
+            self.add_word(words[0])
+        else:
+            # Make a letter that definitely does not occur in the word
+            l = max(map(max, words)) + 1
+
+            big_word = []
+            for i, word in enumerate(words):
+                for letter in word:
+                    big_word.append(letter)
+                big_word.append(l + i)
+
+            self.add_word(big_word)
+            
+            # Now we go through and remove all non-letter links
+            for state in self.states:
+                for i in range(len(words)):
+                    if l+i in state.transition:
+                        del state.transition[l+i]
+
+            #TODO: Now apply a minimization algorithm
+
+
+    def add_word(self, word: Word, last_state: Optional[State] = None) -> State:
         """ Adds a single word to the automaton and return final state.
 
         Args:
@@ -72,7 +96,9 @@ class SuffixAutomaton:
         Returns:
             The final state after inserting all letters.
         """
-        last_state: State = self.states[self.root]
+        if last_state is None:
+            last_state = self.states[self.root]
+
         for letter in word:
             last_state = self.add_letter(letter, last_state)
         return last_state
