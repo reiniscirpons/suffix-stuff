@@ -29,6 +29,9 @@ def SuffixTree:
 
         A = SuffixAutomaton([])
         A.add_word(big_reverse_word)
+        # The suffix links of A are now exactly the edges of the suffix tree,
+        # however its nontrivial to extract the additional information from this
+
 
 
     

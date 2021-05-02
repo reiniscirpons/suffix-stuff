@@ -21,6 +21,8 @@ class State:
         state_id:    An integer representing position of the state in the
                      automatons state list.
         length:      The length of the longest substring ending at this state.
+        count:       The number of occurences of the longest substring ending at
+                     this state.
         suffix_link: The state corresponding to the longest suffix of the
                      substrings ending at this state, that is distinct from the
                      current state.
@@ -29,10 +31,17 @@ class State:
                      is the state we arrive at by appending `x` to the current
                      substring.
     """
-    def __init__(self, state_id, length, suffix_link=None, transition=None):
-        self.state_id: StateId = state_id
-        self.length: int = length
-        self.suffix_link: Optional[State] = suffix_link
+    def __init__(self,
+                 state_id: StateId,
+                 length: int,
+                 count: int,
+                 suffix_link: Optional[State] = None,
+                 transition: Optional[Dict[Letter, State]] = None):
+        self.state_id= state_id
+        self.length= length
+        self.suffix_link = suffix_link
+        # Count will get updated by the automaton, it is wrong at initialization
+        self.count = count
         # Use a dict since the automaton will be sparse, so we will have a lot
         # of empty transitions
         # TODO: Maybe a single global dict is better than many small dicts?
@@ -77,13 +86,15 @@ class SuffixAutomaton:
         self.states: List[State] = []
         # This is constant
         self.root_id: StateId = 0
-        self.states.append(State(state_id=self.root_id, length=0))
+        self.states.append(State(state_id=self.root_id, length=0, count=0))
 
         if len(words) == 0:
             pass
         elif len(words) == 1:
             # Simple case, no need to do anything complicated
             self.add_word(words[0])
+            # Update number of occurrences
+            self.recompute_count()
         else:
             # Make a letter that definitely does not occur in the word
             l = max(map(max, words)) + 1
@@ -95,7 +106,11 @@ class SuffixAutomaton:
                 big_word.append(l + i)
 
             self.add_word(big_word)
-            
+
+            # Update number of occurrences
+            self.recompute_count()
+            self.states[self.root_id].count -= len(words)
+
             # Now we go through and remove all non-letter links
             for state in self.states:
                 for i in range(len(words)):
@@ -108,7 +123,9 @@ class SuffixAutomaton:
             self.minimize()
 
 
-    def add_word(self, word: Word, last_state: Optional[State] = None) -> State:
+
+
+    def add_word(self, word: Word) -> State:
         """ Adds a single word to the automaton and return final state.
 
         Args:
@@ -117,11 +134,11 @@ class SuffixAutomaton:
         Returns:
             The final state after inserting all letters.
         """
-        if last_state is None:
-            last_state = self.states[self.root_id]
+        last_state = self.states[self.root_id]
 
         for letter in word:
             last_state = self.add_letter(letter, last_state)
+       
         return last_state
 
     def add_letter(self, letter: Letter, last_state: Optional[State]) -> State:
@@ -138,7 +155,8 @@ class SuffixAutomaton:
             last_state = self.states[self.root_id]
 
         new_state: State = State(state_id=len(self.states),
-                                 length=last_state.length + 1)
+                                 length=last_state.length + 1,
+                                 count=1)
         self.states.append(new_state)
 
         while last_state is not None and \
@@ -157,6 +175,7 @@ class SuffixAutomaton:
 
         clone_state: State = State(state_id=len(self.states),
                                    length=last_state.length + 1,
+                                   count=0,
                                    suffix_link=paralell_state.suffix_link,
                                    transition=paralell_state.transition.copy())
         self.states.append(clone_state)
@@ -234,6 +253,12 @@ class SuffixAutomaton:
                     sig_to_rep[mod_sig] = state.state_id
                 else:
                     representative[state.state_id] = sig_to_rep[mod_sig]
+
+        # Aggregate counts
+        for state in self.states:
+            if representative[state.state_id] != state.state_id:
+                new_state = self.states[representative[state.state_id]]
+                assert new_state.count == state.count
 
         # Now replace all states by representatives
         self.root_id = representative[self.root_id]
@@ -325,3 +350,14 @@ class SuffixAutomaton:
             for child in state.transition.values():
                 child.length = max(child.length, state.length + 1)
 
+    def recompute_count(self) -> None:
+        """ Update all the states count parameter.
+
+        The length of a state is the length of the longest word ending in that
+        state. This function recomputes the length for every state.
+        """
+        states = self.topological_sort()
+        while len(states) > 0:
+            state = states.pop()
+            if state.suffix_link is not None:
+                state.suffix_link.count += state.count
