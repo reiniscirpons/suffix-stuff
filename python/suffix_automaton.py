@@ -5,14 +5,13 @@
 # [2]: en.wikipedia.org/wiki/Suffix_automaton
 
 from __future__ import annotations
-from typing import Dict, Tuple, List, Optional
+from typing import Dict, Tuple, List, Optional, Set
 
 
 # Some type aliases
 StateId = int
 Letter = int
-Word = List[Letter]
-Signature = Tuple[Tuple[Letter, StateId], ...]
+Word = Tuple[Letter, ...]
 
 class State:
     """ A suffix automaton state.
@@ -23,6 +22,7 @@ class State:
         length:      The length of the longest substring ending at this state.
         count:       The number of occurences of the longest substring ending at
                      this state.
+        is_terminal: A boolean telling us if the state is terminal
         suffix_link: The state corresponding to the longest suffix of the
                      substrings ending at this state, that is distinct from the
                      current state.
@@ -34,14 +34,15 @@ class State:
     def __init__(self,
                  state_id: StateId,
                  length: int,
-                 count: int,
                  suffix_link: Optional[State] = None,
                  transition: Optional[Dict[Letter, State]] = None):
-        self.state_id= state_id
-        self.length= length
+        self.state_id = state_id
+        self.length = length
         self.suffix_link = suffix_link
         # Count will get updated by the automaton, it is wrong at initialization
-        self.count = count
+        self.count = 0
+        # Incorrect at initialization, will get updated later.
+        self.is_terminal = False
         # Use a dict since the automaton will be sparse, so we will have a lot
         # of empty transitions
         # TODO: Maybe a single global dict is better than many small dicts?
@@ -50,23 +51,6 @@ class State:
             self.transition = {}
         else:
             self.transition = transition
-
-    def signature(self) -> Signature:
-        """ Return the states signature.
-
-        A signature is an encoding of a states transition as a tuple.
-        If a state q has a transition to a states p_1, p_2, ..., p_n labeled by
-        letters a_1, a_2, ..., a_n, then its signature is
-        ((a_1, p_1), ..., (a_n, p_n))
-        Where we assume a_1 < a_2 < ... < a_n
-        Additionally, we differentiate a terminal state by adding an
-        extra symbol to the state, but since all our states are terminal this is
-        not of particular benefit to us currently.
-        """
-        signature = []
-        for letter in sorted(self.transition):
-            signature.append((letter, self.transition[letter].state_id))
-        return tuple(signature)
 
 
 class SuffixAutomaton:
@@ -86,60 +70,40 @@ class SuffixAutomaton:
         self.states: List[State] = []
         # This is constant
         self.root_id: StateId = 0
-        self.states.append(State(state_id=self.root_id, length=0, count=0))
+        self.states.append(State(state_id=self.root_id, length=0))
 
-        if len(words) == 0:
-            pass
-        elif len(words) == 1:
-            # Simple case, no need to do anything complicated
-            self.add_word(words[0])
-            # Update number of occurrences
-            self.recompute_count()
-        else:
-            # Make a letter that definitely does not occur in the word
-            l = max(map(max, words)) + 1
+        for word in words:
+            self.add_word(word)
 
-            big_word = []
-            for i, word in enumerate(words):
-                for letter in word:
-                    big_word.append(letter)
-                big_word.append(l + i)
+        # Make suffix states terminal, and update counts
+        for word in words:
+            state: Optional[State] = self.states[self.root_id]
+            for letter in word:
+                # Transition is guaranteed to exist by construction
+                state = state.transition[letter]
+                state.count += 1
 
-            self.add_word(big_word)
+            while state is not None:
+                state.is_terminal = True
+                state = state.suffix_link
 
-            # Update number of occurrences
-            self.recompute_count()
-            self.states[self.root_id].count -= len(words)
+        # Update number of occurrences
+        self.recompute_count()
 
-            # Now we go through and remove all non-letter links
-            for state in self.states:
-                for i in range(len(words)):
-                    if l+i in state.transition:
-                        del state.transition[l+i]
+    def add_word(self, word: Word) -> None:
+        """ Adds a single word to the automaton.
 
-            # Remove all unreachable states
-            self.connected_subautomaton()
-            # Now apply a minimization algorithm
-            self.minimize()
-
-
-
-
-    def add_word(self, word: Word) -> State:
-        """ Adds a single word to the automaton and return final state.
+        Modifies the automaton so that it accepts all the suffixes of word in
+        addition to any that it already accepts.
 
         Args:
             word: The word to insert.
-
-        Returns:
-            The final state after inserting all letters.
         """
-        last_state = self.states[self.root_id]
+        last_state: Optional[State] = self.states[self.root_id]
 
         for letter in word:
             last_state = self.add_letter(letter, last_state)
-       
-        return last_state
+
 
     def add_letter(self, letter: Letter, last_state: Optional[State]) -> State:
         """ Add a single letter transition to a given state, return new state.
@@ -154,28 +118,30 @@ class SuffixAutomaton:
         if last_state is None:
             last_state = self.states[self.root_id]
 
-        new_state: State = State(state_id=len(self.states),
-                                 length=last_state.length + 1,
-                                 count=1)
-        self.states.append(new_state)
+        new_state: Optional[State] = None
+        if letter not in last_state.transition:
+            new_state = State(state_id=len(self.states),
+                              length=last_state.length + 1)
+            self.states.append(new_state)
 
-        while last_state is not None and \
-              letter not in last_state.transition:
-            last_state.transition[letter] = new_state
-            last_state = last_state.suffix_link
+            while last_state is not None and \
+                  letter not in last_state.transition:
+                last_state.transition[letter] = new_state
+                last_state = last_state.suffix_link
 
-        if last_state is None:
-            new_state.suffix_link = self.states[self.root_id]
-            return new_state
+            if last_state is None:
+                new_state.suffix_link = self.states[self.root_id]
+                return new_state
 
         paralell_state: State = last_state.transition[letter]
         if paralell_state.length == last_state.length + 1:
-            new_state.suffix_link = paralell_state
-            return new_state
+            if new_state is not None:
+                new_state.suffix_link = paralell_state
+                return new_state
+            return paralell_state
 
         clone_state: State = State(state_id=len(self.states),
                                    length=last_state.length + 1,
-                                   count=0,
                                    suffix_link=paralell_state.suffix_link,
                                    transition=paralell_state.transition.copy())
         self.states.append(clone_state)
@@ -184,112 +150,14 @@ class SuffixAutomaton:
             last_state.transition[letter] = clone_state
             last_state = last_state.suffix_link
         paralell_state.suffix_link = clone_state
-        new_state.suffix_link = clone_state
 
-        return new_state
-
-
-    # Minimization
-
-    def connected_subautomaton(self) -> None:
-        """ Modify self in place to remove all disconnected states.
-
-        A state of an automaton is disconnected if no path from the initial
-        state can reach it or there is no path to a final state. In our case,
-        every state is final, so we simply test the former.
-
-        """
-        connected_states = [self.states[self.root_id]]
-        seen = [False for _ in range(len(self.states))]
-        seen[self.root_id] = True
-        c = 0
-        while c < len(connected_states):
-            state = connected_states[c]
-            for child in state.transition.values():
-                if not seen[child.state_id]:
-                    seen[child.state_id] = True
-                    connected_states.append(child)
-            c += 1
-
-        self.states = connected_states
-        self.root_id = 0
-        for i, state in enumerate(self.states):
-            state.state_id = i
-
-    def minimize(self) -> None:
-        """ Modify self in place to yield a minimal automaton.
-
-        Uses an algorithm known as Revuz minimization. We will divide the states
-        into "layers" based on the length of the longest path leading into it.
-        Then we minimize layer by layer, at each layer finding out hte
-        equivalent states using a radix sort.
-        """
-
-        representative: List[StateId]
-        representative = list(range(len(self.states)))
-
-        max_length = max(state.length for state in self.states)
-        layers: List[List[State]] = [[] for _ in range(max_length+1)]
-        for state in self.states:
-            layers[state.length].append(state)
-
-        # In the original algorithm we would use a radix sort and whatnot, but
-        # here we relegate to using a hash map since its quicker to implement
-        # and likely has the same or better practical time complexity
-        sig_to_rep: Dict[Signature, StateId] = {}
-        for layer in reversed(layers):
-            for state in layer:
-                # Generate a "modified" signature, i.e.\ one where we replace
-                # every state id by its representative in the current partially
-                # minimized transducer
-                temp_sig = []
-                for letter in sorted(state.transition):
-                    temp_sig.append((letter, \
-                            representative[state.transition[letter].state_id]))
-                mod_sig = tuple(temp_sig)
-                # We are guaranteed that modified signatures are the same if and
-                # only if two states are equivalent
-                if mod_sig not in sig_to_rep:
-                    sig_to_rep[mod_sig] = state.state_id
-                else:
-                    representative[state.state_id] = sig_to_rep[mod_sig]
-
-        # Aggregate counts
-        for state in self.states:
-            if representative[state.state_id] != state.state_id:
-                new_state = self.states[representative[state.state_id]]
-                assert new_state.count == state.count
-
-        # Now replace all states by representatives
-        self.root_id = representative[self.root_id]
-        new_states = [self.states[self.root_id]]
-        seen = [False for _ in range(len(self.states))]
-        seen[self.root_id] = True
-        c = 0
-        while c < len(new_states):
-            state = new_states[c]
-            if state.suffix_link is not None:
-                new_suffix_link = self.states[representative[ \
-                        state.suffix_link.state_id]]
-                if new_suffix_link.state_id != state.state_id:
-                    state.suffix_link = new_suffix_link
-                else:
-                    state.suffix_link = None
-            for letter, child in state.transition.items():
-                new_child = self.states[representative[child.state_id]]
-                state.transition[letter] = new_child
-                if not seen[new_child.state_id]:
-                    seen[new_child.state_id] = True
-                    new_states.append(new_child)
-            c += 1
-
-        self.states = new_states
-        for i, state in enumerate(self.states):
-            state.state_id = i
+        if new_state is not None:
+            new_state.suffix_link = clone_state
+            return new_state
+        return clone_state
 
     # Utility
-
-    def traverse(self, word: Word) -> StateId:
+    def traverse(self, word: Word) -> Optional[State]:
         """ Traverse the word letter by letter through the automaton.
 
         Args:
@@ -303,9 +171,34 @@ class SuffixAutomaton:
         state = self.states[self.root_id]
         for letter in word:
             if letter not in state.transition:
-                return -1
+                return None
             state = state.transition[letter]
-        return state.state_id
+        return state
+
+    def accepts(self, word: Word) -> bool:
+        """ Return true is automaton accepts word and false otherwise. """
+        state = self.traverse(word)
+        return state is not None and state.is_terminal
+
+    def language(self) -> Set[Word]:
+        """ Compute the language accepted by the automaton. """
+        right_languages: List[Set[Word]] = \
+            [set() for _ in range(len(self.states))]
+
+
+        topo = self.topological_sort()
+        while len(topo)>0:
+            state = topo.pop()
+            if state.is_terminal:
+                # Add empty word
+                right_languages[state.state_id].add(tuple())
+
+            for letter in state.transition:
+                child = state.transition[letter]
+                for word in right_languages[child.state_id]:
+                    right_languages[state.state_id].add((letter,)+word)
+
+        return right_languages[self.root_id]
 
     def topological_sort(self) -> List[State]:
         """ Returns the list of states of the automaton in topological order.
@@ -353,8 +246,8 @@ class SuffixAutomaton:
     def recompute_count(self) -> None:
         """ Update all the states count parameter.
 
-        The length of a state is the length of the longest word ending in that
-        state. This function recomputes the length for every state.
+        The count of a state is the number of times the substring represented by
+        the word occurs in the text.
         """
         states = self.topological_sort()
         while len(states) > 0:
