@@ -52,6 +52,23 @@ class State:
         else:
             self.transition = transition
 
+    def __str__(self):
+        return str((self.state_id, dict((letter, state.state_id) for\
+                                    letter, state in self.transition.items())))
+
+    def __repr__(self):
+        repr_dict = {"state_id": self.state_id,
+                     "transition": dict((letter, state.state_id) for\
+                                    letter, state in self.transition.items())}
+                     
+        if self.suffix_link is not None:
+            repr_dict["suffix_link"] = self.suffix_link.state_id
+        else:
+            repr_dict["suffix_link"] = -1
+
+        repr
+
+
 
 class SuffixAutomaton:
     """ A suffix automaton.
@@ -254,3 +271,31 @@ class SuffixAutomaton:
             state = states.pop()
             if state.suffix_link is not None:
                 state.suffix_link.count += state.count
+
+    def __repr__(self):
+        repr_dict = {"initial": self.root_id,
+                     "state_transitions": {},
+                     "terminal": set(),
+                     "suffix_links": {},
+                     "lengths": {},
+                     "counts": {}}
+        for state in self.states:
+            repr_dict["state_transitions"][state.state_id] = {}
+            for letter in state.transition:
+                repr_dict["state_transitions"][state.state_id][letter] = \
+                    state.transition[letter].state_id
+
+            if state.is_terminal:
+                repr_dict["terminal"].add(state.state_id)
+
+            if state.suffix_link is not None:
+                repr_dict["suffix_links"][state.state_id] = \
+                    state.suffix_link.state_id
+            else:
+                repr_dict["suffix_links"][state.state_id] = -1
+
+            repr_dict["lengths"][state.state_id] = state.length
+
+            repr_dict["counts"][state.state_id] = state.count
+
+        return repr(repr_dict)
